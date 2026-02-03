@@ -1,22 +1,10 @@
 import { AgentRunStats, Alert, Competitor, CompetitorAssignment, SystemConfig, SystemHealth } from './types';
 
 /**
- * Robust API Base URL
- * In production, the backend serves the frontend, so we use the current origin.
+ * API Client
+ * Uses relative paths to leverage Vite proxy in development and same-origin in production.
  */
-const getBaseUrl = () => {
-  if (typeof window === 'undefined') return '';
-  const origin = window.location.origin;
-  
-  // Handle local development where frontend (Vite) and backend (FastAPI) might be on different ports
-  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-    return 'http://localhost:8000';
-  }
-  
-  return origin;
-};
-
-const BASE_URL = getBaseUrl();
+const BASE_URL = '';
 
 const fetcher = async (endpoint: string, options?: RequestInit) => {
   const url = `${BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
@@ -29,6 +17,12 @@ const fetcher = async (endpoint: string, options?: RequestInit) => {
         ...options?.headers
       }
     });
+    
+    // Check if we got an HTML response (usually a 404 page or server error page)
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("text/html")) {
+        throw new Error(`Endpoint not found (404). The server returned HTML instead of JSON. Ensure the backend is running.`);
+    }
     
     if (!response.ok) {
       const text = await response.text();
@@ -59,22 +53,22 @@ export const API = {
   runDiagnostics: async (): Promise<SystemHealth> => {
     try {
       const start = Date.now();
-      const res = await fetch(`${BASE_URL}/api/health`);
+      const res = await fetch(`/api/health`);
       const duration = Date.now() - start;
       if (res.ok) {
-        const data = await res.json();
+        // const data = await res.json();
         return { 
           bdxStatus: 'ok', 
           aiStatus: 'ok', 
-          message: `Successfully connected to backend at ${BASE_URL} (${duration}ms). DB Status: ${data.db}` 
+          message: `Connected to backend (${duration}ms).` 
         };
       }
-      throw new Error();
+      throw new Error("Health check failed");
     } catch (e) {
       return { 
         bdxStatus: 'error', 
         aiStatus: 'error', 
-        message: `Failed to reach backend at ${BASE_URL}. Ensure the service is active on Railway.` 
+        message: `Failed to reach backend. Ensure the Python server is running on port 8000.` 
       };
     }
   }
